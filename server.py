@@ -6,7 +6,6 @@ from crypto_lib import (
     rsa_generate_keypair, rsa_decrypt_bytes, b64d,
     aes_decrypt_cbc, des_decrypt_cbc, rsa_decrypt_text
 )
-from manual_toy_des import toy_des_decrypt_cbc
 from protocol import send_packet, recv_packet
 
 # KLASİK ŞİFRELER
@@ -39,7 +38,6 @@ def main():
     kp = rsa_generate_keypair(2048)
     aes_key = None
     des_key = None
-    toy_key = None
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((HOST, PORT))
@@ -62,7 +60,7 @@ def main():
 
                 if ptype == "key_exchange":
                     # istemci AES/DES key'i RSA public ile şifreleyip gönderir
-                    which = pkt["which"]  # "AES" / "DES" / "TOYDES"
+                    which = pkt["which"]  # "AES" / "DES"
                     enc_key_b64 = pkt["enc_key_b64"]
                     enc_key = b64d(enc_key_b64)
                     key = rsa_decrypt_bytes(kp.private_pem, enc_key)
@@ -79,19 +77,13 @@ def main():
                         des_key = key
                         print("[SERVER] DES anahtarı alındı.")
 
-                    elif which == "TOYDES":
-                        if len(key) != 8:
-                            raise ValueError("TOYDES anahtarı 8 byte olmalı.")
-                        toy_key = key
-                        print("[SERVER] TOYDES anahtarı alındı.")
-
                     else:
                         raise ValueError("Bilinmeyen key türü.")
 
                     send_packet(conn, {"type": "ack", "msg": f"{which} key OK"})
 
                 elif ptype == "message":
-                    alg = pkt["algorithm"]     # "AES" "DES" "RSA" "TOYDES" veya "CAESAR" vs
+                    alg = pkt["algorithm"]     # "AES" "DES" "RSA"  veya klasik şifreler
                     mode = pkt.get("mode")     # "lib" / "manual" / "classic" (opsiyonel)
                     alg_u = str(alg).upper()
 
@@ -109,7 +101,7 @@ def main():
 
                         text = cipher.decrypt(ct_text, key1, key2)
 
-                    # --- AES / DES / TOYDES / RSA (mevcut sistem) ---
+                    # --- AES / DES / RSA (mevcut sistem) ---
                     elif alg_u == "AES":
                         if not aes_key:
                             raise ValueError("Önce AES key_exchange yapılmalı.")
@@ -119,11 +111,6 @@ def main():
                         if not des_key:
                             raise ValueError("Önce DES key_exchange yapılmalı.")
                         text = des_decrypt_cbc(pkt["iv_b64"], pkt["ct_b64"], des_key)
-
-                    elif alg_u == "TOYDES":
-                        if not toy_key:
-                            raise ValueError("Önce TOYDES key_exchange yapılmalı.")
-                        text = toy_des_decrypt_cbc(pkt["iv_b64"], pkt["ct_b64"], toy_key)
 
                     elif alg_u == "RSA":
                         # RSA ile direkt mesaj (kısa olmalı)

@@ -8,7 +8,6 @@ from crypto_lib import (
     rsa_encrypt_bytes, rsa_encrypt_text,
     aes_encrypt_cbc, des_encrypt_cbc, b64e
 )
-from manual_toy_des import toy_des_encrypt_cbc
 
 # KLASİK ŞİFRELER
 from algorithms import (
@@ -108,16 +107,15 @@ def main():
         # Anahtarları üret (ödev izin veriyor: başlangıçta üretilebilir)
         aes_key = get_random_bytes(16)
         des_key = get_random_bytes(8)
-        toy_key = get_random_bytes(8)
 
-        # Key exchange: AES, DES, TOYDES anahtarlarını RSA ile gönder
-        for which, key in [("AES", aes_key), ("DES", des_key), ("TOYDES", toy_key)]:
+        # Key exchange: AES ve DES anahtarlarını RSA ile gönder
+        for which, key in [("AES", aes_key), ("DES", des_key)]:
             enc = rsa_encrypt_bytes(server_pub_pem, key)
             send_packet(s, {"type": "key_exchange", "which": which, "enc_key_b64": b64e(enc)})
             ack = recv_packet(s)
             print(f"[CLIENT] {ack['msg']}")
 
-        all_algs = ["AES", "DES", "RSA", "TOYDES"] + list(CLASSIC_MAP.keys())
+        all_algs = ["AES", "DES", "RSA"] + list(CLASSIC_MAP.keys())
 
         while True:
             alg = choose("Algoritma seç", all_algs)
@@ -141,7 +139,7 @@ def main():
                     "key2": key2,
                 }
 
-            # --- AES / DES / TOYDES / RSA (mevcut sistem) ---
+            # --- AES / DES / RSA (mevcut sistem) ---
             elif alg == "AES":
                 out = aes_encrypt_cbc(msg, aes_key)
                 pkt = {"type": "message", "algorithm": "AES", "mode": "lib", **out}
@@ -149,10 +147,6 @@ def main():
             elif alg == "DES":
                 out = des_encrypt_cbc(msg, des_key)
                 pkt = {"type": "message", "algorithm": "DES", "mode": "lib", **out}
-
-            elif alg == "TOYDES":
-                out = toy_des_encrypt_cbc(msg, toy_key)
-                pkt = {"type": "message", "algorithm": "TOYDES", "mode": "manual", **out}
 
             elif alg == "RSA":
                 # RSA ile direkt mesaj (kısa olmalı)

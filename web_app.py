@@ -34,14 +34,12 @@ SERVER_ECC = ecc_generate_keypair("P256")  # ECC arka planda mevcut
 
 SERVER_AES_KEY = None
 SERVER_DES_KEY = None
-SERVER_TOY_KEY = None
 
 # ----------------------------
 # CLIENT tarafı: simetrik anahtarları üretir
 # ----------------------------
 CLIENT_AES_KEY = get_random_bytes(16)
 CLIENT_DES_KEY = get_random_bytes(8)
-CLIENT_TOY_KEY = get_random_bytes(8)
 
 KEY_EXCHANGE_OK = False
 
@@ -65,22 +63,20 @@ def do_rsa_key_exchange() -> None:
     CLIENT: simetrik key'leri üretir ve SERVER_RSA.public ile şifreler
     SERVER: private ile çözer ve bellekte saklar
     """
-    global SERVER_AES_KEY, SERVER_DES_KEY, SERVER_TOY_KEY, KEY_EXCHANGE_OK
+    global SERVER_AES_KEY, SERVER_DES_KEY, KEY_EXCHANGE_OK
 
     try:
         enc_aes = rsa_encrypt_bytes(SERVER_RSA.public_pem, CLIENT_AES_KEY)
         enc_des = rsa_encrypt_bytes(SERVER_RSA.public_pem, CLIENT_DES_KEY)
-        enc_toy = rsa_encrypt_bytes(SERVER_RSA.public_pem, CLIENT_TOY_KEY)
 
         SERVER_AES_KEY = rsa_decrypt_bytes(SERVER_RSA.private_pem, enc_aes)
         SERVER_DES_KEY = rsa_decrypt_bytes(SERVER_RSA.private_pem, enc_des)
-        SERVER_TOY_KEY = rsa_decrypt_bytes(SERVER_RSA.private_pem, enc_toy)
 
-        if len(SERVER_AES_KEY) != 16 or len(SERVER_DES_KEY) != 8 or len(SERVER_TOY_KEY) != 8:
+        if len(SERVER_AES_KEY) != 16 or len(SERVER_DES_KEY) != 8:
             raise ValueError("Anahtar uzunluğu hatası.")
 
         KEY_EXCHANGE_OK = True
-        print("[KEY-EXCHANGE] RSA ile AES/DES/TOY anahtarları başarıyla dağıtıldı ✅")
+        print("[KEY-EXCHANGE] RSA ile AES/DES anahtarları başarıyla dağıtıldı ✅")
 
     except Exception as e:
         KEY_EXCHANGE_OK = False
@@ -91,7 +87,7 @@ def parse_key(key_str: str, expected_len: int) -> bytes:
     """
     Kullanıcı düz metin veya hex girebilir.
     AES için expected_len=16 (16 karakter veya 32 hex)
-    DES/TOYDES için expected_len=8 (8 karakter veya 16 hex)
+    DES için expected_len=8 (8 karakter veya 16 hex)
     """
     s = (key_str or "").strip()
     if not s:
@@ -585,10 +581,8 @@ def render(**kwargs):
         key_ok=KEY_EXCHANGE_OK,
         client_aes=CLIENT_AES_KEY.hex(),
         client_des=CLIENT_DES_KEY.hex(),
-        client_toy=CLIENT_TOY_KEY.hex(),
         server_aes=(SERVER_AES_KEY.hex() if SERVER_AES_KEY else "None"),
         server_des=(SERVER_DES_KEY.hex() if SERVER_DES_KEY else "None"),
-        server_toy=(SERVER_TOY_KEY.hex() if SERVER_TOY_KEY else "None"),
         **kwargs
     )
 
