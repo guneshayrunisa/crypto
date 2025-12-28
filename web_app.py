@@ -5,11 +5,17 @@ import json
 from crypto_lib import (
     aes_encrypt_cbc, aes_decrypt_cbc,
     des_encrypt_cbc, des_decrypt_cbc,
-    rsa_generate_keypair, rsa_encrypt_text, rsa_decrypt_text,
+    rsa_generate_keypair,
     rsa_encrypt_bytes, rsa_decrypt_bytes,
 )
 from algorithms.manual_aes import manual_aes_encrypt_cbc, manual_aes_decrypt_cbc
 from algorithms.manual_des import manual_des_encrypt_cbc, manual_des_decrypt_cbc
+
+# ECC - Arka planda mevcut ama UI'da kullanılmıyor
+from ecc_lib import (
+    ecc_generate_keypair,
+    ecdsa_sign, ecdsa_verify,
+)
 
 # KLASİK ŞİFRELER
 from algorithms import (
@@ -21,9 +27,11 @@ from algorithms import (
 app = Flask(__name__)
 
 # ----------------------------
-# SERVER tarafı: RSA keypair + saklanan simetrik anahtarlar
+# SERVER tarafı: RSA + ECC keypair + saklanan simetrik anahtarlar
 # ----------------------------
 SERVER_RSA = rsa_generate_keypair(2048)
+SERVER_ECC = ecc_generate_keypair("P256")  # ECC arka planda mevcut
+
 SERVER_AES_KEY = None
 SERVER_DES_KEY = None
 SERVER_TOY_KEY = None
@@ -53,6 +61,7 @@ CLASSIC_MAP = {
 
 def do_rsa_key_exchange() -> None:
     """
+    RSA ile Anahtar Dağıtımı:
     CLIENT: simetrik key'leri üretir ve SERVER_RSA.public ile şifreler
     SERVER: private ile çözer ve bellekte saklar
     """
@@ -277,6 +286,7 @@ HTML = r"""
       border:1px solid var(--line); background: rgba(255,255,255,.05); font-size:13px;
     }
     .err{ border-color: rgba(255,84,112,.40); background: rgba(255,84,112,.10); }
+    .success{ border-color: rgba(46,229,157,.40); background: rgba(46,229,157,.10); }
     .footer{
       margin-top:16px; padding:14px 16px; border-radius: var(--radius);
       border:1px solid var(--line); background: rgba(255,255,255,.04); color:var(--muted); font-size:13px;
@@ -302,25 +312,25 @@ HTML = r"""
   <div class="wrap">
     <div class="top">
       <div class="brand">
-        <h1>Crypto Lab</h1>
-        <p>Algoritma seç → şifrele → şifreli metni kopyala → yapıştır → deşifre et.</p>
+        <h1>🔐 Crypto Lab</h1>
+        <p>Modern & Klasik Kriptografi | RSA Key Exchange, AES-128, DES</p>
       </div>
     </div>
 
     {% if debug %}
     <div class="footer">
-      <b>Debug</b><br>
-      Key Exchange: <span class="mono">{{ "OK" if key_ok else "FAIL" }}</span><br><br>
+      <b>Debug - RSA Key Exchange</b><br>
+      Key Exchange: <span class="mono">{{ "OK ✅" if key_ok else "FAIL ❌" }}</span><br><br>
+      <b>Simetrik Anahtarlar:</b><br>
       CLIENT_AES_KEY: <span class="mono">{{client_aes}}</span><br>
       SERVER_AES_KEY: <span class="mono">{{server_aes}}</span><br><br>
       CLIENT_DES_KEY: <span class="mono">{{client_des}}</span><br>
       SERVER_DES_KEY: <span class="mono">{{server_des}}</span><br><br>
-      CLIENT_TOY_KEY: <span class="mono">{{client_toy}}</span><br>
-      SERVER_TOY_KEY: <span class="mono">{{server_toy}}</span><br>
-      <span class="tiny">Debug kapatmak için URL’den <code>?debug=1</code> kaldır.</span>
+      <span class="tiny">Debug kapatmak için URL'den <code>?debug=1</code> kaldır.</span>
     </div>
     {% endif %}
 
+    <!-- ŞİFRELEME KARTLARI -->
     <div class="grid">
       <div class="card">
         <div class="cardHead">
@@ -334,24 +344,20 @@ HTML = r"""
                 <label>Algoritma</label>
                 <select name="alg" id="algSelect" onchange="syncKeyHints()">
                   <optgroup label="Modern">
-                    <option value="AES" {{'selected' if alg_in=='AES' else ''}}>AES-128 (CBC)</option>
-                    <option value="DES" {{'selected' if alg_in=='DES' else ''}}>DES (CBC)</option>
                     <option value="AES_LIB" {{'selected' if alg_in=='AES_LIB' else ''}}>AES-128 (Kütüphaneli)</option>
                     <option value="AES_MANUAL" {{'selected' if alg_in=='AES_MANUAL' else ''}}>AES-128 (Manuel)</option>
                     <option value="DES_LIB" {{'selected' if alg_in=='DES_LIB' else ''}}>DES (Kütüphaneli)</option>
                     <option value="DES_MANUAL" {{'selected' if alg_in=='DES_MANUAL' else ''}}>DES (Manuel)</option>
-                    <option value="RSA" {{'selected' if alg_in=='RSA' else ''}}>RSA (OAEP) • kısa mesaj</option>
-                    <option value="RSA" {{'selected' if alg_in=='RSA' else ''}}>RSA (OAEP) • kısa mesaj</option>
                   </optgroup>
                   <optgroup label="Klasik">
-                    <option value="CAESAR" {{'selected' if alg_in=='CAESAR' else ''}}>Caesar </option>
-                    <option value="VIGENERE" {{'selected' if alg_in=='VIGENERE' else ''}}>Vigenere </option>
-                    <option value="AFFINE" {{'selected' if alg_in=='AFFINE' else ''}}>Affine </option>
-                    <option value="SUBSTITUTION" {{'selected' if alg_in=='SUBSTITUTION' else ''}}>Substitution </option>
+                    <option value="CAESAR" {{'selected' if alg_in=='CAESAR' else ''}}>Caesar</option>
+                    <option value="VIGENERE" {{'selected' if alg_in=='VIGENERE' else ''}}>Vigenere</option>
+                    <option value="AFFINE" {{'selected' if alg_in=='AFFINE' else ''}}>Affine</option>
+                    <option value="SUBSTITUTION" {{'selected' if alg_in=='SUBSTITUTION' else ''}}>Substitution</option>
                     <option value="RAILFENCE" {{'selected' if alg_in=='RAILFENCE' else ''}}>RailFence</option>
                     <option value="ROUTE" {{'selected' if alg_in=='ROUTE' else ''}}>Route</option>
                     <option value="COLUMNAR" {{'selected' if alg_in=='COLUMNAR' else ''}}>Columnar</option>
-                    <option value="POLYBIUS" {{'selected' if alg_in=='POLYBIUS' else ''}}>Polybius </option>
+                    <option value="POLYBIUS" {{'selected' if alg_in=='POLYBIUS' else ''}}>Polybius</option>
                     <option value="PLAYFAIR" {{'selected' if alg_in=='PLAYFAIR' else ''}}>Playfair (EN 5x5)</option>
                     <option value="HILL" {{'selected' if alg_in=='HILL' else ''}}>Hill (TR, mod 29)</option>
                   </optgroup>
@@ -363,7 +369,6 @@ HTML = r"""
               </div>
             </div>
 
-            <!-- TEK KEY -->
             <div style="margin-top:10px;">
               <label>Key</label>
               <input name="key" id="key" placeholder="Seçilen algoritmaya göre key gir..." value="{{key_in or ''}}" />
@@ -376,7 +381,7 @@ HTML = r"""
             </div>
 
             <div class="copyRow">
-              <button class="btn" type="submit">Şifrele</button>
+              <button class="btn" type="submit">🔒 Şifrele</button>
               <button class="btn secondary" type="button" onclick="window.location.href='/'">Temizle</button>
             </div>
           </form>
@@ -401,52 +406,47 @@ HTML = r"""
         </div>
         <div class="cardBody">
           <form method="post" action="/decrypt">
-  <div class="row">
-    <div>
-      <label>Algoritma</label>
-      <select name="alg" id="decAlgSelect" onchange="syncDecKeyHints()">
-        <optgroup label="Modern">
-          <option value="AES">AES-128 (CBC)</option>
-          <option value="DES">DES (CBC)</option>
-          <option value="AES_LIB">AES-128 (Kütüphaneli)</option>
-          <option value="AES_MANUAL">AES-128 (Manuel)</option>
-          <option value="DES_LIB">DES (Kütüphaneli)</option>
-          <option value="DES_MANUAL">DES (Manuel)</option>
-          <option value="RSA">RSA (OAEP)</option>
-          <option value="RSA">RSA (OAEP)</option>
-        </optgroup>
-        <optgroup label="Klasik">
-          <option value="CAESAR">Caesar </option>
-          <option value="VIGENERE">Vigenere </option>
-          <option value="AFFINE">Affine </option>
-          <option value="SUBSTITUTION">Substitution </option>
-          <option value="RAILFENCE">RailFence</option>
-          <option value="ROUTE">Route</option>
-          <option value="COLUMNAR">Columnar</option>
-          <option value="POLYBIUS">Polybius</option>
-          <option value="PLAYFAIR">Playfair </option>
-          <option value="HILL">Hill </option>
-        </optgroup>
-      </select>
-    </div>
-    <div>
-      <label>Key</label>
-      <input name="key" id="decKey" placeholder="Gerekliyse gir..." value="{{dec_key_in or ''}}" />
-      <div class="help" id="decHelp"></div>
-    </div>
-  </div>
+            <div class="row">
+              <div>
+                <label>Algoritma</label>
+                <select name="alg" id="decAlgSelect" onchange="syncDecKeyHints()">
+                  <optgroup label="Modern">
+                    <option value="AES_LIB">AES-128 (Kütüphaneli)</option>
+                    <option value="AES_MANUAL">AES-128 (Manuel)</option>
+                    <option value="DES_LIB">DES (Kütüphaneli)</option>
+                    <option value="DES_MANUAL">DES (Manuel)</option>
+                  </optgroup>
+                  <optgroup label="Klasik">
+                    <option value="CAESAR">Caesar</option>
+                    <option value="VIGENERE">Vigenere</option>
+                    <option value="AFFINE">Affine</option>
+                    <option value="SUBSTITUTION">Substitution</option>
+                    <option value="RAILFENCE">RailFence</option>
+                    <option value="ROUTE">Route</option>
+                    <option value="COLUMNAR">Columnar</option>
+                    <option value="POLYBIUS">Polybius</option>
+                    <option value="PLAYFAIR">Playfair</option>
+                    <option value="HILL">Hill</option>
+                  </optgroup>
+                </select>
+              </div>
+              <div>
+                <label>Key</label>
+                <input name="key" id="decKey" placeholder="Gerekliyse gir..." value="{{dec_key_in or ''}}" />
+                <div class="help" id="decHelp"></div>
+              </div>
+            </div>
 
-  <div style="margin-top:10px;">
-    <label>Şifreli Metin</label>
-    <textarea name="ciphertext" placeholder="Şifreli metni buraya yapıştır...">{{cipher_in or ""}}</textarea>
-  </div>
+            <div style="margin-top:10px;">
+              <label>Şifreli Metin</label>
+              <textarea name="ciphertext" placeholder="Şifreli metni buraya yapıştır...">{{cipher_in or ""}}</textarea>
+            </div>
 
-  <div class="copyRow">
-    <button class="btn green" type="submit">Deşifre Et</button>
-    <button class="btn secondary" type="button" onclick="window.location.href='/'">Temizle</button>
-  </div>
-</form>
-
+            <div class="copyRow">
+              <button class="btn green" type="submit">🔓 Deşifre Et</button>
+              <button class="btn secondary" type="button" onclick="window.location.href='/'">Temizle</button>
+            </div>
+          </form>
 
           {% if dec_error %}
             <div class="status err"><b>Hata:</b> {{dec_error}}</div>
@@ -458,26 +458,12 @@ HTML = r"""
               <div class="mono">{{dec_plain}}</div>
             </div>
           {% endif %}
-
         </div>
       </div>
     </div>
-
-  
   </div>
 
 <script>
-  function copyToken(){
-    const el = document.getElementById("tokenBox");
-    if(!el) return;
-    const text = el.textContent;
-    navigator.clipboard.writeText(text).then(() => {
-      const m = document.getElementById("copyMsg");
-      if(m){ m.textContent = "Kopyalandı ✅"; }
-      setTimeout(()=>{ if(m){m.textContent="";} }, 1200);
-    });
-  }
-
   function syncKeyHints(){
     const alg = document.getElementById("algSelect").value;
     const key = document.getElementById("key");
@@ -486,23 +472,12 @@ HTML = r"""
     key.disabled = false;
     help1.textContent = "";
 
-    if (alg === "AES"){
-      help1.textContent = "Opsiyonel: 16 karakter anahtar. Boş bırak → RSA key exchange key'i.";
-      key.placeholder = "Opsiyonel 16 karakter (örn MySecretKey12345)";
-    } else if (alg === "DES"){
-      help1.textContent = "Opsiyonel: 8 karakter anahtar. Boş bırak → RSA key exchange key'i.";
-      key.placeholder = "Opsiyonel 8 karakter (örn Secret12)";
-    } if (alg === "AES_LIB" || alg === "AES_MANUAL"){
-      help1.textContent = "Opsiyonel: 16 karakter anahtar. Boş bırak → RSA key exchange key'i.";
+    if (alg === "AES_LIB" || alg === "AES_MANUAL"){
+      help1.textContent = "Opsiyonel: 16 karakter anahtar. Boş bırak → RSA key exchange key'i kullanılır.";
       key.placeholder = "Opsiyonel 16 karakter (örn MySecretKey12345)";
     } else if (alg === "DES_LIB" || alg === "DES_MANUAL"){
-      help1.textContent = "Opsiyonel: 8 karakter anahtar. Boş bırak → RSA key exchange key'i.";
+      help1.textContent = "Opsiyonel: 8 karakter anahtar. Boş bırak → RSA key exchange key'i kullanılır.";
       key.placeholder = "Opsiyonel 8 karakter (örn Secret12)";
-    } else if (alg === "RSA"){
-      help1.textContent = "RSA'da key girilmez (public key server tarafında).";
-      key.value = "";
-      key.placeholder = "Kullanılmaz";
-      key.disabled = true;
     } else if (alg === "CAESAR"){
       help1.textContent = "Key = kaydırma sayısı (0-28 arası). Örn: 3";
       key.placeholder = "örn 3";
@@ -553,20 +528,12 @@ HTML = r"""
     key.disabled = false;
     help.textContent = "";
 
-    if (alg === "AES"){
-      help.textContent = "Boş bırak → server exchange key'i. Özel key kullandıysan 32 hex karakter gir.";
-      key.placeholder = "Opsiyonel 32 hex";
-    } else if (alg === "AES_LIB" || alg === "AES_MANUAL"){
+    if (alg === "AES_LIB" || alg === "AES_MANUAL"){
       help.textContent = "Boş bırak → server exchange key'i. Özel key kullandıysan 16 karakter gir.";
       key.placeholder = "Opsiyonel 16 karakter";
     } else if (alg === "DES_LIB" || alg === "DES_MANUAL"){
       help.textContent = "Boş bırak → server exchange key'i. Özel key kullandıysan 8 karakter gir.";
       key.placeholder = "Opsiyonel 8 karakter";
-    } else if (alg === "RSA"){
-      help.textContent = "RSA'da key yok.";
-      key.value = "";
-      key.placeholder = "Kullanılmaz";
-      key.disabled = true;
     } else if (alg === "CAESAR"){
       help.textContent = "Key = kaydırma sayısı (0-28). Örn: 3";
       key.placeholder = "örn 3";
@@ -604,15 +571,12 @@ HTML = r"""
     if (key.disabled) key.value = "";
   }
 
-  // sayfa yüklenince
   syncDecKeyHints();
 </script>
 
 </body>
 </html>
 """
-
-
 def render(**kwargs):
     debug = (request.args.get("debug") == "1")
     return render_template_string(
@@ -632,20 +596,14 @@ def render(**kwargs):
 @app.get("/")
 def index():
     return render(
-        # şifrele paneli varsayılan
-        alg_in="AES",
+        alg_in="AES_LIB",
         key_in="",
         plain_in="",
-
-        # çıktı alanları
         enc_text=None,
         enc_error=None,
-
-        # deşifre paneli varsayılan
-        dec_alg_in="AES",
+        dec_alg_in="AES_LIB",
         dec_key_in="",
         cipher_in="",
-
         dec_plain=None,
         dec_error=None,
     )
@@ -661,9 +619,7 @@ def encrypt():
         if not plaintext:
             raise ValueError("Düz metin boş olamaz.")
 
-        # -------------------------
         # KLASİK ŞİFRELER
-        # -------------------------
         if alg in CLASSIC_MAP:
             cipher = CLASSIC_MAP[alg]
             key1, key2 = parse_key_for_classic_single_input(alg, key_raw)
@@ -682,10 +638,7 @@ def encrypt():
                 dec_error=None,
             )
 
-        # -------------------------
         # MODERN ŞİFRELER
-        # -------------------------
-
         if alg == "AES_LIB":
             custom = parse_key(key_raw, 16)
             use_key = custom if custom else CLIENT_AES_KEY
@@ -708,21 +661,6 @@ def encrypt():
             custom = parse_key(key_raw, 8)
             use_key = custom if custom else CLIENT_DES_KEY
             out = manual_des_encrypt_cbc(plaintext, use_key)
-            enc_text = f"{out['iv_b64']}.{out['ct_b64']}"
-
-        elif alg == "RSA":
-            enc_text = rsa_encrypt_text(SERVER_RSA.public_pem, plaintext)
-
-        elif alg == "AES":
-            custom = parse_key(key_raw, 16)
-            use_key = custom if custom else CLIENT_AES_KEY
-            out = aes_encrypt_cbc(plaintext, use_key)
-            enc_text = f"{out['iv_b64']}.{out['ct_b64']}"
-
-        elif alg == "DES":
-            custom = parse_key(key_raw, 8)
-            use_key = custom if custom else CLIENT_DES_KEY
-            out = des_encrypt_cbc(plaintext, use_key)
             enc_text = f"{out['iv_b64']}.{out['ct_b64']}"
 
         else:
@@ -755,6 +693,7 @@ def encrypt():
             dec_error=None,
         )
 
+
 @app.post("/decrypt")
 def decrypt():
     alg = (request.form.get("alg") or "").strip().upper()
@@ -765,18 +704,14 @@ def decrypt():
         if not ciphertext:
             raise ValueError("Şifreli metin boş olamaz.")
 
-        # -------------------------
         # KLASİK ŞİFRELER
-        # -------------------------
         if alg in CLASSIC_MAP:
             cipher = CLASSIC_MAP[alg]
             key1, key2 = parse_key_for_classic_single_input(alg, key_raw)
             dec_plain = cipher.decrypt(ciphertext, key1, key2)
 
-        # -------------------------
         # MODERN ŞİFRELER
-        # -------------------------
-        elif alg in ("AES", "AES_LIB", "AES_MANUAL", "DES", "DES_LIB", "DES_MANUAL"):
+        elif alg in ("AES_LIB", "AES_MANUAL", "DES_LIB", "DES_MANUAL"):
             if "." not in ciphertext:
                 raise ValueError("Modern şifrelerde format: iv_b64.ct_b64 olmalı (araya nokta).")
 
@@ -784,35 +719,30 @@ def decrypt():
             iv_b64 = iv_b64.strip()
             ct_b64 = ct_b64.strip()
 
-            # Önce hangi key kullanılacağını belirle
-            if alg in ("AES", "AES_LIB", "AES_MANUAL"):
+            if alg in ("AES_LIB", "AES_MANUAL"):
                 custom = parse_key(key_raw, 16)
                 use_key = custom if custom else (SERVER_AES_KEY if KEY_EXCHANGE_OK else None)
-            else:  # DES ailesi
+            else:
                 custom = parse_key(key_raw, 8)
                 use_key = custom if custom else (SERVER_DES_KEY if KEY_EXCHANGE_OK else None)
 
             if not use_key:
                 raise ValueError("Key exchange yapılmadı ve custom key de girilmedi.")
 
-            # Şimdi decrypt et
-            if alg == "AES" or alg == "AES_LIB":
+            if alg == "AES_LIB":
                 dec_plain = aes_decrypt_cbc(iv_b64, ct_b64, use_key)
             elif alg == "AES_MANUAL":
                 dec_plain = manual_aes_decrypt_cbc(iv_b64, ct_b64, use_key)
-            elif alg == "DES" or alg == "DES_LIB":
+            elif alg == "DES_LIB":
                 dec_plain = des_decrypt_cbc(iv_b64, ct_b64, use_key)
             elif alg == "DES_MANUAL":
                 dec_plain = manual_des_decrypt_cbc(iv_b64, ct_b64, use_key)
-
-        elif alg == "RSA":
-            dec_plain = rsa_decrypt_text(SERVER_RSA.private_pem, ciphertext)
 
         else:
             raise ValueError("Desteklenmeyen algoritma.")
 
         return render(
-            alg_in="AES",
+            alg_in="AES_LIB",
             key_in="",
             plain_in="",
             enc_text=None,
@@ -826,17 +756,19 @@ def decrypt():
 
     except Exception as e:
         return render(
-            alg_in="AES",
+            alg_in="AES_LIB",
             key_in="",
             plain_in="",
             enc_text=None,
             enc_error=None,
-            dec_alg_in=alg or "AES",
+            dec_alg_in=alg or "AES_LIB",
             dec_key_in=key_raw,
             cipher_in=ciphertext,
             dec_plain=None,
             dec_error=str(e),
         )
+
+
 # Key exchange'i uygulama başında yap
 do_rsa_key_exchange()
 
