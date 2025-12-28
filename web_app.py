@@ -8,7 +8,8 @@ from crypto_lib import (
     rsa_generate_keypair, rsa_encrypt_text, rsa_decrypt_text,
     rsa_encrypt_bytes, rsa_decrypt_bytes,
 )
-from manual_toy_des import toy_des_encrypt_cbc, toy_des_decrypt_cbc
+from algorithms.manual_aes import manual_aes_encrypt_cbc, manual_aes_decrypt_cbc
+from algorithms.manual_des import manual_des_encrypt_cbc, manual_des_decrypt_cbc
 
 # KLASİK ŞİFRELER
 from algorithms import (
@@ -77,22 +78,35 @@ def do_rsa_key_exchange() -> None:
         print("[KEY-EXCHANGE] HATA ❌:", e)
 
 
-def parse_hex_key(hex_str: str, expected_len: int) -> bytes:
+def parse_key(key_str: str, expected_len: int) -> bytes:
     """
-    AES için expected_len=16 (32 hex)
-    DES/TOYDES için expected_len=8 (16 hex)
+    Kullanıcı düz metin veya hex girebilir.
+    AES için expected_len=16 (16 karakter veya 32 hex)
+    DES/TOYDES için expected_len=8 (8 karakter veya 16 hex)
     """
-    s = (hex_str or "").strip().lower().replace(" ", "")
+    s = (key_str or "").strip()
     if not s:
         return b""
-    try:
-        b = bytes.fromhex(s)
-    except Exception:
-        raise ValueError("Key hex formatında olmalı. Örn: 001122aabb...")
-    if len(b) != expected_len:
-        raise ValueError(f"Key uzunluğu {expected_len} byte olmalı (hex uzunluğu {expected_len*2}).")
-    return b
-
+    
+    # Önce hex mi kontrol et (sadece 0-9a-f içeriyorsa)
+    cleaned = s.lower().replace(" ", "")
+    if all(c in '0123456789abcdef' for c in cleaned):
+        # Hex olabilir
+        if len(cleaned) == expected_len * 2:
+            try:
+                return bytes.fromhex(cleaned)
+            except:
+                pass
+    
+    # Normal metin olarak al
+    key_bytes = s.encode('utf-8')
+    if len(key_bytes) < expected_len:
+        raise ValueError(f"Key en az {expected_len} karakter olmalı.")
+    elif len(key_bytes) > expected_len:
+        # Fazlaysa kes
+        key_bytes = key_bytes[:expected_len]
+    
+    return key_bytes
 
 def parse_key_for_classic_single_input(alg: str, key_raw: str):
     """
@@ -322,7 +336,11 @@ HTML = r"""
                   <optgroup label="Modern">
                     <option value="AES" {{'selected' if alg_in=='AES' else ''}}>AES-128 (CBC)</option>
                     <option value="DES" {{'selected' if alg_in=='DES' else ''}}>DES (CBC)</option>
-                    <option value="TOYDES" {{'selected' if alg_in=='TOYDES' else ''}}>Manuel (Toy-DES)</option>
+                    <option value="AES_LIB" {{'selected' if alg_in=='AES_LIB' else ''}}>AES-128 (Kütüphaneli)</option>
+                    <option value="AES_MANUAL" {{'selected' if alg_in=='AES_MANUAL' else ''}}>AES-128 (Manuel)</option>
+                    <option value="DES_LIB" {{'selected' if alg_in=='DES_LIB' else ''}}>DES (Kütüphaneli)</option>
+                    <option value="DES_MANUAL" {{'selected' if alg_in=='DES_MANUAL' else ''}}>DES (Manuel)</option>
+                    <option value="RSA" {{'selected' if alg_in=='RSA' else ''}}>RSA (OAEP) • kısa mesaj</option>
                     <option value="RSA" {{'selected' if alg_in=='RSA' else ''}}>RSA (OAEP) • kısa mesaj</option>
                   </optgroup>
                   <optgroup label="Klasik">
@@ -390,7 +408,11 @@ HTML = r"""
         <optgroup label="Modern">
           <option value="AES">AES-128 (CBC)</option>
           <option value="DES">DES (CBC)</option>
-          <option value="TOYDES">Manuel (Toy-DES)</option>
+          <option value="AES_LIB">AES-128 (Kütüphaneli)</option>
+          <option value="AES_MANUAL">AES-128 (Manuel)</option>
+          <option value="DES_LIB">DES (Kütüphaneli)</option>
+          <option value="DES_MANUAL">DES (Manuel)</option>
+          <option value="RSA">RSA (OAEP)</option>
           <option value="RSA">RSA (OAEP)</option>
         </optgroup>
         <optgroup label="Klasik">
@@ -465,50 +487,53 @@ HTML = r"""
     help1.textContent = "";
 
     if (alg === "AES"){
-      help1.textContent = "Opsiyonel: 16 byte key (32 hex). Boş bırak → RSA key exchange key’i.";
-      key.placeholder = "Opsiyonel 32 hex (örn 001122...)";
+      help1.textContent = "Opsiyonel: 16 karakter anahtar. Boş bırak → RSA key exchange key'i.";
+      key.placeholder = "Opsiyonel 16 karakter (örn MySecretKey12345)";
     } else if (alg === "DES"){
-      help1.textContent = "Opsiyonel: 8 byte key (16 hex). Boş bırak → RSA key exchange key’i.";
-      key.placeholder = "Opsiyonel 16 hex";
-    } else if (alg === "TOYDES"){
-      help1.textContent = "Opsiyonel: 8 byte key (16 hex). Boş bırak → RSA key exchange key’i.";
-      key.placeholder = "Opsiyonel 16 hex";
+      help1.textContent = "Opsiyonel: 8 karakter anahtar. Boş bırak → RSA key exchange key'i.";
+      key.placeholder = "Opsiyonel 8 karakter (örn Secret12)";
+    } if (alg === "AES_LIB" || alg === "AES_MANUAL"){
+      help1.textContent = "Opsiyonel: 16 karakter anahtar. Boş bırak → RSA key exchange key'i.";
+      key.placeholder = "Opsiyonel 16 karakter (örn MySecretKey12345)";
+    } else if (alg === "DES_LIB" || alg === "DES_MANUAL"){
+      help1.textContent = "Opsiyonel: 8 karakter anahtar. Boş bırak → RSA key exchange key'i.";
+      key.placeholder = "Opsiyonel 8 karakter (örn Secret12)";
     } else if (alg === "RSA"){
-      help1.textContent = "RSA’da key girilmez (public key server tarafında).";
+      help1.textContent = "RSA'da key girilmez (public key server tarafında).";
       key.value = "";
       key.placeholder = "Kullanılmaz";
       key.disabled = true;
     } else if (alg === "CAESAR"){
-      help1.textContent = "Key = kaydırma (örn 3).";
+      help1.textContent = "Key = kaydırma sayısı (0-28 arası). Örn: 3";
       key.placeholder = "örn 3";
     } else if (alg === "VIGENERE"){
-      help1.textContent = "Key = anahtar kelime (örn KRIPTO).";
+      help1.textContent = "Key = anahtar kelime (TR harfler). Örn: KRIPTO";
       key.placeholder = "örn KRIPTO";
     } else if (alg === "AFFINE"){
-      help1.textContent = "Tek kutu: a,b (örn 5,8).";
+      help1.textContent = "Key = a,b şeklinde iki sayı. a ve 29 aralarında asal olmalı. Örn: 5,8";
       key.placeholder = "örn 5,8";
     } else if (alg === "SUBSTITUTION"){
-      help1.textContent = "Key = 29 harflik TR alfabe permütasyonu.";
+      help1.textContent = "Key = 29 harflik TR alfabe permütasyonu (her harf bir kez).";
       key.placeholder = "29 harflik permütasyon";
     } else if (alg === "RAILFENCE"){
-      help1.textContent = "Key = ray sayısı (örn 3).";
+      help1.textContent = "Key = ray (satır) sayısı. Örn: 3";
       key.placeholder = "örn 3";
     } else if (alg === "ROUTE"){
-      help1.textContent = "Key = sütun sayısı (örn 5).";
+      help1.textContent = "Key = sütun sayısı. Örn: 5";
       key.placeholder = "örn 5";
     } else if (alg === "COLUMNAR"){
-      help1.textContent = "Key = anahtar kelime (örn KRIPTO).";
+      help1.textContent = "Key = anahtar kelime. Örn: KRIPTO";
       key.placeholder = "örn KRIPTO";
     } else if (alg === "POLYBIUS"){
-      help1.textContent = "Bu algoritmada key yok.";
+      help1.textContent = "Bu algoritmada key yok (5x5 sabit tablo kullanılır).";
       key.value = "";
       key.placeholder = "Kullanılmaz";
       key.disabled = true;
     } else if (alg === "PLAYFAIR"){
-      help1.textContent = "Key = anahtar kelime (EN). Örn SECURITY";
+      help1.textContent = "Key = anahtar kelime (İngilizce harfler). Örn: SECURITY";
       key.placeholder = "örn SECURITY";
     } else if (alg === "HILL"){
-      help1.textContent = "Key = matris. Örn [[3,3],[2,5]]";
+      help1.textContent = "Key = kare matris (JSON formatında). Örn: [[3,3],[2,5]]";
       key.placeholder = "örn [[3,3],[2,5]]";
     }
 
@@ -529,27 +554,51 @@ HTML = r"""
     help.textContent = "";
 
     if (alg === "AES"){
-      help.textContent = "Boş bırak → server exchange key’i. Özel key kullandıysan 32 hex gir.";
+      help.textContent = "Boş bırak → server exchange key'i. Özel key kullandıysan 32 hex karakter gir.";
       key.placeholder = "Opsiyonel 32 hex";
-    } else if (alg === "DES" || alg === "TOYDES"){
-      help.textContent = "Boş bırak → server exchange key’i. Özel key kullandıysan 16 hex gir.";
-      key.placeholder = "Opsiyonel 16 hex";
+    } else if (alg === "AES_LIB" || alg === "AES_MANUAL"){
+      help.textContent = "Boş bırak → server exchange key'i. Özel key kullandıysan 16 karakter gir.";
+      key.placeholder = "Opsiyonel 16 karakter";
+    } else if (alg === "DES_LIB" || alg === "DES_MANUAL"){
+      help.textContent = "Boş bırak → server exchange key'i. Özel key kullandıysan 8 karakter gir.";
+      key.placeholder = "Opsiyonel 8 karakter";
     } else if (alg === "RSA"){
-      help.textContent = "RSA’da key yok.";
+      help.textContent = "RSA'da key yok.";
       key.value = "";
       key.placeholder = "Kullanılmaz";
       key.disabled = true;
+    } else if (alg === "CAESAR"){
+      help.textContent = "Key = kaydırma sayısı (0-28). Örn: 3";
+      key.placeholder = "örn 3";
+    } else if (alg === "VIGENERE"){
+      help.textContent = "Key = anahtar kelime. Örn: KRIPTO";
+      key.placeholder = "örn KRIPTO";
     } else if (alg === "AFFINE"){
-      help.textContent = "Tek kutu: a,b (örn 5,8)";
+      help.textContent = "Key = a,b şeklinde. a ve 29 aralarında asal. Örn: 5,8";
       key.placeholder = "örn 5,8";
+    } else if (alg === "SUBSTITUTION"){
+      help.textContent = "Key = 29 harflik permütasyon.";
+      key.placeholder = "29 harflik permütasyon";
+    } else if (alg === "RAILFENCE"){
+      help.textContent = "Key = ray sayısı. Örn: 3";
+      key.placeholder = "örn 3";
+    } else if (alg === "ROUTE"){
+      help.textContent = "Key = sütun sayısı. Örn: 5";
+      key.placeholder = "örn 5";
+    } else if (alg === "COLUMNAR"){
+      help.textContent = "Key = anahtar kelime. Örn: KRIPTO";
+      key.placeholder = "örn KRIPTO";
     } else if (alg === "POLYBIUS"){
       help.textContent = "Key yok.";
       key.value = "";
       key.placeholder = "Kullanılmaz";
       key.disabled = true;
-    } else {
-      help.textContent = "Klasiklerde gerekiyorsa key gir.";
-      key.placeholder = "Gerekliyse gir";
+    } else if (alg === "PLAYFAIR"){
+      help.textContent = "Key = anahtar kelime (EN). Örn: SECURITY";
+      key.placeholder = "örn SECURITY";
+    } else if (alg === "HILL"){
+      help.textContent = "Key = matris (JSON). Örn: [[3,3],[2,5]]";
+      key.placeholder = "örn [[3,3],[2,5]]";
     }
 
     if (key.disabled) key.value = "";
@@ -613,7 +662,7 @@ def encrypt():
             raise ValueError("Düz metin boş olamaz.")
 
         # -------------------------
-        # KLASİK ŞİFRELER: 5 harf -> 5 harf
+        # KLASİK ŞİFRELER
         # -------------------------
         if alg in CLASSIC_MAP:
             cipher = CLASSIC_MAP[alg]
@@ -624,45 +673,57 @@ def encrypt():
                 alg_in=alg,
                 key_in=key_raw,
                 plain_in=plaintext,
-
-                enc_text=ct_text,   # sadece şifreli metin göster
+                enc_text=ct_text,
                 enc_error=None,
-
-                # deşifre panelini sıfırla
                 dec_alg_in=alg,
                 dec_key_in=key_raw,
                 cipher_in=ct_text,
-
                 dec_plain=None,
                 dec_error=None,
             )
 
         # -------------------------
-        # MODERN ŞİFRELER: metin olarak gösterilecek format
-        # AES/DES/TOYDES için: "iv_b64.ct_b64"
-        # RSA için: "ct_b64"
+        # MODERN ŞİFRELER
         # -------------------------
-        if alg == "AES":
-            custom = parse_hex_key(key_raw, 16)
+
+        if alg == "AES_LIB":
+            custom = parse_key(key_raw, 16)
+            use_key = custom if custom else CLIENT_AES_KEY
+            out = aes_encrypt_cbc(plaintext, use_key)
+            enc_text = f"{out['iv_b64']}.{out['ct_b64']}"
+
+        elif alg == "AES_MANUAL":
+            custom = parse_key(key_raw, 16)
+            use_key = custom if custom else CLIENT_AES_KEY
+            out = manual_aes_encrypt_cbc(plaintext, use_key)
+            enc_text = f"{out['iv_b64']}.{out['ct_b64']}"
+
+        elif alg == "DES_LIB":
+            custom = parse_key(key_raw, 8)
+            use_key = custom if custom else CLIENT_DES_KEY
+            out = des_encrypt_cbc(plaintext, use_key)
+            enc_text = f"{out['iv_b64']}.{out['ct_b64']}"
+
+        elif alg == "DES_MANUAL":
+            custom = parse_key(key_raw, 8)
+            use_key = custom if custom else CLIENT_DES_KEY
+            out = manual_des_encrypt_cbc(plaintext, use_key)
+            enc_text = f"{out['iv_b64']}.{out['ct_b64']}"
+
+        elif alg == "RSA":
+            enc_text = rsa_encrypt_text(SERVER_RSA.public_pem, plaintext)
+
+        elif alg == "AES":
+            custom = parse_key(key_raw, 16)
             use_key = custom if custom else CLIENT_AES_KEY
             out = aes_encrypt_cbc(plaintext, use_key)
             enc_text = f"{out['iv_b64']}.{out['ct_b64']}"
 
         elif alg == "DES":
-            custom = parse_hex_key(key_raw, 8)
+            custom = parse_key(key_raw, 8)
             use_key = custom if custom else CLIENT_DES_KEY
             out = des_encrypt_cbc(plaintext, use_key)
             enc_text = f"{out['iv_b64']}.{out['ct_b64']}"
-
-        elif alg == "TOYDES":
-            custom = parse_hex_key(key_raw, 8)
-            use_key = custom if custom else CLIENT_TOY_KEY
-            out = toy_des_encrypt_cbc(plaintext, use_key)
-            enc_text = f"{out['iv_b64']}.{out['ct_b64']}"
-
-        elif alg == "RSA":
-            # RSA kısa mesajı direkt base64 metin olarak verebiliriz
-            enc_text = rsa_encrypt_text(SERVER_RSA.public_pem, plaintext)
 
         else:
             raise ValueError("Bilinmeyen algoritma seçimi.")
@@ -671,40 +732,31 @@ def encrypt():
             alg_in=alg,
             key_in=key_raw,
             plain_in=plaintext,
-
-            enc_text=enc_text,   # token yok, sadece metin
+            enc_text=enc_text,
             enc_error=None,
-
-            # deşifre tarafını otomatik doldurmak istersen:
             dec_alg_in=alg,
             dec_key_in=key_raw,
             cipher_in=enc_text,
-
             dec_plain=None,
             dec_error=None,
         )
 
     except Exception as e:
         return render(
-            alg_in=alg or "AES",
+            alg_in=alg or "AES_LIB",
             key_in=key_raw,
             plain_in=plaintext,
-
             enc_text=None,
             enc_error=str(e),
-
-            dec_alg_in="AES",
+            dec_alg_in="AES_LIB",
             dec_key_in="",
             cipher_in="",
-
             dec_plain=None,
             dec_error=None,
         )
 
-
 @app.post("/decrypt")
 def decrypt():
-    # Artık token değil:
     alg = (request.form.get("alg") or "").strip().upper()
     ciphertext = (request.form.get("ciphertext") or "").strip()
     key_raw = request.form.get("key") or ""
@@ -723,10 +775,8 @@ def decrypt():
 
         # -------------------------
         # MODERN ŞİFRELER
-        # AES/DES/TOYDES: "iv_b64.ct_b64" bekleniyor
-        # RSA: ct_b64 bekleniyor
         # -------------------------
-        elif alg in ("AES", "DES", "TOYDES"):
+        elif alg in ("AES", "AES_LIB", "AES_MANUAL", "DES", "DES_LIB", "DES_MANUAL"):
             if "." not in ciphertext:
                 raise ValueError("Modern şifrelerde format: iv_b64.ct_b64 olmalı (araya nokta).")
 
@@ -734,57 +784,42 @@ def decrypt():
             iv_b64 = iv_b64.strip()
             ct_b64 = ct_b64.strip()
 
-            if alg == "AES":
-                custom = parse_hex_key(key_raw, 16)
-                if custom:
-                    use_key = custom
-                else:
-                    if not KEY_EXCHANGE_OK or SERVER_AES_KEY is None:
-                        raise ValueError("Key exchange yapılmadı.")
-                    use_key = SERVER_AES_KEY
+            # Önce hangi key kullanılacağını belirle
+            if alg in ("AES", "AES_LIB", "AES_MANUAL"):
+                custom = parse_key(key_raw, 16)
+                use_key = custom if custom else (SERVER_AES_KEY if KEY_EXCHANGE_OK else None)
+            else:  # DES ailesi
+                custom = parse_key(key_raw, 8)
+                use_key = custom if custom else (SERVER_DES_KEY if KEY_EXCHANGE_OK else None)
+
+            if not use_key:
+                raise ValueError("Key exchange yapılmadı ve custom key de girilmedi.")
+
+            # Şimdi decrypt et
+            if alg == "AES" or alg == "AES_LIB":
                 dec_plain = aes_decrypt_cbc(iv_b64, ct_b64, use_key)
-
-            elif alg == "DES":
-                custom = parse_hex_key(key_raw, 8)
-                if custom:
-                    use_key = custom
-                else:
-                    if not KEY_EXCHANGE_OK or SERVER_DES_KEY is None:
-                        raise ValueError("Key exchange yapılmadı.")
-                    use_key = SERVER_DES_KEY
+            elif alg == "AES_MANUAL":
+                dec_plain = manual_aes_decrypt_cbc(iv_b64, ct_b64, use_key)
+            elif alg == "DES" or alg == "DES_LIB":
                 dec_plain = des_decrypt_cbc(iv_b64, ct_b64, use_key)
-
-            else:  # TOYDES
-                custom = parse_hex_key(key_raw, 8)
-                if custom:
-                    use_key = custom
-                else:
-                    if not KEY_EXCHANGE_OK or SERVER_TOY_KEY is None:
-                        raise ValueError("Key exchange yapılmadı.")
-                    use_key = SERVER_TOY_KEY
-                dec_plain = toy_des_decrypt_cbc(iv_b64, ct_b64, use_key)
+            elif alg == "DES_MANUAL":
+                dec_plain = manual_des_decrypt_cbc(iv_b64, ct_b64, use_key)
 
         elif alg == "RSA":
-            # RSA decrypt: ciphertext zaten ct_b64
             dec_plain = rsa_decrypt_text(SERVER_RSA.private_pem, ciphertext)
 
         else:
             raise ValueError("Desteklenmeyen algoritma.")
 
         return render(
-            # şifrele paneli olduğu gibi kalsın (istersen boşlatabiliriz)
             alg_in="AES",
             key_in="",
             plain_in="",
-
             enc_text=None,
             enc_error=None,
-
-            # deşifre panelinde girilenleri koru
             dec_alg_in=alg,
             dec_key_in=key_raw,
             cipher_in=ciphertext,
-
             dec_plain=dec_plain,
             dec_error=None,
         )
@@ -794,19 +829,14 @@ def decrypt():
             alg_in="AES",
             key_in="",
             plain_in="",
-
             enc_text=None,
             enc_error=None,
-
             dec_alg_in=alg or "AES",
             dec_key_in=key_raw,
             cipher_in=ciphertext,
-
             dec_plain=None,
             dec_error=str(e),
         )
-
-
 # Key exchange'i uygulama başında yap
 do_rsa_key_exchange()
 
