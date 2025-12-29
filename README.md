@@ -49,4 +49,24 @@ uygulamalı olarak göstermeyi hedefler.
 ```bash
 git clone <https://github.com/guneshayrunisa/crypto>
 cd crypto_hw
+```
 
+### Sanal Ortam Oluştur
+```bash
+python -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+```
+
+### Bağımlılıkları Yükle
+```bash
+pip install -r requirements.txt
+```
+
+### Çalıştırma
+```bash
+python app.py
+```
+
+<img width="1696" height="821" alt="image" src="https://github.com/user-attachments/assets/bc03b004-f634-474f-b91d-b84d58b1ea62" />
+
+<img width="314" height="591" alt="image" src="https://github.com/user-attachments/assets/e96c39e6-2312-4b30-875a-23b6402e9675" />
